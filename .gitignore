@@ -1,0 +1,17 @@
+node_modules/
+dist/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/app/release/
+android/app/src/main/assets/public/
+*.keystore
+*.jks
+*.log
+.vite/
+coverage/
+.DS_Store
+Thumbs.db
+vibe_images/
+qa/
