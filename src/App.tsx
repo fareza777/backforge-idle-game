@@ -551,7 +551,7 @@ export default function App() {
     modalContent = (
       <div className="menu-list">
         {([
-          ['bounties', 'sword', 'Valley Bounties', readyBounties > 0 ? `${readyBounties} contract ready to claim!` : 'Active guild contracts for Ore & Gems'],
+          ['bounties', 'sword', 'Valley Bounties', readyBounties > 0 ? `${readyBounties} ${readyBounties === 1 ? 'contract' : 'contracts'} ready to claim!` : 'Active guild contracts for Ore & Gems'],
           ['achievements', 'trophy', 'Achievements', `${state.achievements.length} / 16 earned · Gem rewards`],
           ['daily', 'calendar', 'Daily Rewards', dailyReady ? 'A seven-day gift is waiting' : 'Today’s gift is already yours'],
           ['guide', 'book', 'Forge Guide', 'Merges, boosters, bonds, smelting & overdrive'],
@@ -656,7 +656,7 @@ export default function App() {
             )}
 
             <div className="hero-hud">
-              <div className="hero-portrait"><img src="/art/forge-knight-hero.webp" alt="" /></div>
+              <div className="hero-portrait"><img src="/art/hero-portrait.webp" alt="Forge Knight" /></div>
               <div className="hero-vitals">
                 <div><Icon name="heart" size={15} /><strong>Forge Knight</strong><span>{battle.heroHp} / {battle.heroMaxHp}</span></div>
                 <div className="hero-health-track"><span style={{ width: `${(battle.heroHp / battle.heroMaxHp) * 100}%` }} /></div>

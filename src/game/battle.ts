@@ -131,17 +131,17 @@ type AnimationName =
 const ANIMATION_INFO: Record<AnimationName, { frames: number; fps: number; bodyHeightRatio: number }> = {
   'hero-idle': { frames: 4, fps: 8, bodyHeightRatio: 1.033 },
   'hero-run': { frames: 4, fps: 14, bodyHeightRatio: 1.009 },
-  'hero-sword': { frames: 8, fps: 18, bodyHeightRatio: 0.953 },
-  'hero-daggers': { frames: 8, fps: 20, bodyHeightRatio: 1.005 },
-  'hero-heavy': { frames: 8, fps: 16, bodyHeightRatio: 0.937 },
-  'hero-bow': { frames: 6, fps: 16, bodyHeightRatio: 0.971 },
+  'hero-sword': { frames: 8, fps: 13, bodyHeightRatio: 0.953 },
+  'hero-daggers': { frames: 8, fps: 15, bodyHeightRatio: 1.005 },
+  'hero-heavy': { frames: 8, fps: 12, bodyHeightRatio: 0.937 },
+  'hero-bow': { frames: 6, fps: 12, bodyHeightRatio: 0.971 },
   'boar-run': { frames: 4, fps: 14, bodyHeightRatio: 1 },
-  'boar-attack': { frames: 4, fps: 14, bodyHeightRatio: 1 },
+  'boar-attack': { frames: 4, fps: 11, bodyHeightRatio: 1 },
   'scout-run': { frames: 4, fps: 14, bodyHeightRatio: 1 },
   'golem-walk': { frames: 4, fps: 10, bodyHeightRatio: 1 },
   'hound-run': { frames: 4, fps: 14, bodyHeightRatio: 1 },
   'boss-walk': { frames: 4, fps: 10, bodyHeightRatio: 1 },
-  'boss-attack': { frames: 4, fps: 12, bodyHeightRatio: 1 },
+  'boss-attack': { frames: 4, fps: 10, bodyHeightRatio: 1 },
   'warden-walk': { frames: 4, fps: 10, bodyHeightRatio: 1 },
   'dreadnought-walk': { frames: 4, fps: 10, bodyHeightRatio: 1 },
 };
@@ -195,6 +195,7 @@ export class BattleEngine {
   private readonly images = new Map<string, HTMLImageElement>();
   private readonly loadedClips = new Set<AnimationName>();
   private readonly resizeObserver: ResizeObserver;
+  private readonly unsubscribeStore: () => void;
   private frame = 0;
   private lastTime = 0;
   private snapshotTimer = 0;
@@ -258,7 +259,29 @@ export class BattleEngine {
       image.src = path;
       this.images.set(key, image);
     });
-    (['hero-idle', 'hero-run', 'boar-run', 'boar-attack', 'scout-run'] as AnimationName[]).forEach((clip) => this.loadClip(clip));
+    (
+      [
+        'hero-idle',
+        'hero-run',
+        'hero-sword',
+        'hero-daggers',
+        'hero-heavy',
+        'hero-bow',
+        'boar-run',
+        'boar-attack',
+        'scout-run',
+      ] as AnimationName[]
+    ).forEach((clip) => this.loadClip(clip));
+    this.unsubscribeStore = this.store.subscribe(() => {
+      const next = this.store.getSnapshot();
+      const prevWeapons = this.loadout.weapons.length;
+      this.loadout = calculateLoadout(next.inventory, next.talents, next.forgeMarks);
+      this.hero.hp = Math.min(this.hero.hp, this.loadout.maxHp);
+      if (this.loadout.weapons.length !== prevWeapons) {
+        this.weaponTimers = this.loadout.weapons.map((_, idx) => this.weaponTimers[idx] ?? 0.16);
+      }
+      this.loadout.weapons.forEach((weapon) => this.loadClip(clipForWeapon(weapon.item.kind)));
+    });
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
     this.resize();
@@ -452,6 +475,7 @@ export class BattleEngine {
   destroy(): void {
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
+    this.unsubscribeStore();
   }
 
   private loadClip(name: AnimationName): void {
@@ -584,7 +608,7 @@ export class BattleEngine {
     if (target) {
       const desired = hasRangedOnly
         ? this.width * 0.2
-        : Math.max(this.width * 0.2, Math.min(this.width * 0.52, target.x - 74));
+        : Math.max(this.width * 0.2, Math.min(this.width * 0.52, target.x - 68));
       const distance = desired - this.hero.x;
       this.hero.moving = Math.abs(distance) > 5;
       this.hero.x += distance * Math.min(1, dt * 3.8);
@@ -793,14 +817,14 @@ export class BattleEngine {
       }
 
       const distance = monster.x - this.hero.x;
-      const attackRange = monster.isBoss ? 84 : monster.kind === 'boar' || monster.kind === 'hound' ? 58 : 50;
+      const attackRange = monster.isBoss ? 96 : monster.kind === 'boar' || monster.kind === 'hound' ? 80 : 78;
       if (distance > attackRange) {
         monster.x -= monster.speed * slowMultiplier * dt;
       } else {
         monster.attackTimer -= dt * slowMultiplier;
         if (monster.attackTimer <= 0) {
           monster.attackTimer = monster.isBoss ? 1.55 : monster.kind === 'hound' ? 0.95 : monster.kind === 'boar' ? 1.25 : 1.1;
-          monster.attackDuration = monster.isBoss ? 0.68 : 0.42;
+          monster.attackDuration = monster.isBoss ? 0.68 : 0.48;
           monster.attackAnimTime = monster.attackDuration;
           monster.attackHitApplied = false;
         }
@@ -888,7 +912,11 @@ export class BattleEngine {
     monster.hitFlash = 0.13;
     monster.squash = isCrit || fromOverdrive ? 0.28 : 0.15;
 
-    const knockbackBase = weapon?.item.kind === 'hammer' || weapon?.item.kind === 'axe' ? 88 : weapon?.item.kind === 'spear' ? 68 : 34;
+    const knockbackBase = weapon?.item.kind === 'hammer' || weapon?.item.kind === 'axe'
+      ? 62
+      : weapon?.item.kind === 'spear'
+        ? 44
+        : 16;
     monster.vx = Math.max(monster.vx, (monster.isBoss ? 0.35 : 1) * (isCrit ? knockbackBase * 1.4 : knockbackBase));
 
     if (!fromOverdrive) {
@@ -999,7 +1027,7 @@ export class BattleEngine {
       maxHp: hp,
       damage: monsterDamage(this.activeStage, this.activeWave, boss),
       speed,
-      attackTimer: 0.55,
+      attackTimer: 0.22,
       attackAnimTime: 0,
       attackDuration: boss ? 0.68 : 0.42,
       attackHitApplied: false,
@@ -1060,7 +1088,13 @@ export class BattleEngine {
     const spriteHeight = Math.min(this.height * 0.68, 170) * ratio;
     const spriteWidth = image?.naturalWidth ? (spriteHeight * image.naturalWidth) / image.naturalHeight : spriteHeight * 0.62;
     const progress = attack ? 1 - attack.time / attack.duration : 0;
-    const lunge = attack?.kind === 'fists' ? Math.sin(progress * Math.PI) * 10 : attack?.kind === 'spear' ? Math.sin(progress * Math.PI) * 14 : 0;
+    const isRangedAttack = attack?.kind === 'bow' || attack?.kind === 'crossbow';
+    const lunge = attack
+      ? Math.sin(progress * Math.PI) * (isRangedAttack ? 6 : attack.kind === 'spear' ? 22 : attack.kind === 'fists' ? 14 : 18)
+      : 0;
+    const tilt = attack
+      ? Math.sin(progress * Math.PI) * (isRangedAttack ? -0.05 : 0.14)
+      : 0;
 
     // Subtle idle breathing + impact squash
     const breathe = !attack && !this.hero.moving ? Math.sin(this.hero.bob * 0.7) * 0.014 : 0;
@@ -1071,12 +1105,13 @@ export class BattleEngine {
     ctx.globalAlpha = this.hero.invulnerable > 0 && Math.sin(this.hero.invulnerable * 18) > 0 ? 0.68 : 1;
     ctx.fillStyle = 'rgba(61, 42, 24, 0.24)';
     ctx.beginPath();
-    ctx.ellipse(this.hero.x, this.ground + 4, spriteWidth * 0.28, 7, 0, 0, Math.PI * 2);
+    ctx.ellipse(this.hero.x + lunge * 0.6, this.ground + 4, spriteWidth * 0.28, 7, 0, 0, Math.PI * 2);
     ctx.fill();
 
     if (image?.complete && image.naturalWidth) {
       ctx.save();
       ctx.translate(this.hero.x + lunge, this.ground);
+      ctx.rotate(tilt);
       ctx.scale(scaleX, scaleY);
       if (this.hero.hitFlash > 0) ctx.filter = 'brightness(1.65) sepia(0.25)';
       ctx.drawImage(image, -spriteWidth / 2, -spriteHeight, spriteWidth, spriteHeight);
@@ -1092,12 +1127,16 @@ export class BattleEngine {
     const ctx = this.ctx;
     const isDying = monster.dyingTime > 0;
     const isAttacking = !isDying && monster.attackAnimTime > 0;
+    const attackRange = monster.isBoss ? 96 : monster.kind === 'boar' || monster.kind === 'hound' ? 80 : 78;
+    const isApproaching = !isDying && !isAttacking && monster.x - this.hero.x > attackRange;
     const attackClip = isAttacking ? attackClipForEnemy(monster.kind) : null;
     const walkClip = walkClipForEnemy(monster.kind);
     const clip = attackClip ?? walkClip;
     const animationTime = attackClip
       ? monster.attackDuration - monster.attackAnimTime
-      : monster.animTime;
+      : isApproaching
+        ? monster.animTime
+        : 0;
     const image = this.animationFrame(clip, animationTime) ?? this.images.get(monster.kind);
 
     const baseHeight = monster.isBoss
@@ -1111,32 +1150,28 @@ export class BattleEngine {
     const spriteWidth = image?.naturalWidth ? (spriteHeight * image.naturalWidth) / image.naturalHeight : spriteHeight * 0.8;
 
     const attackProgress = isAttacking ? 1 - monster.attackAnimTime / monster.attackDuration : 0;
-    // Procedural windup + lunge for enemies without dedicated attack sprite sheets
+    // Expressive windup + lunge + recovery for ALL enemy attacks
     let lunge = 0;
     let tilt = 0;
-    if (isAttacking && !attackClip) {
+    if (isAttacking) {
       if (attackProgress < 0.36) {
-        // Windup back
         const w = attackProgress / 0.36;
-        lunge = -w * 8;
-        tilt = w * 0.14;
-      } else if (attackProgress < 0.65) {
-        // Strike forward
-        const s = (attackProgress - 0.36) / 0.29;
-        lunge = -8 + Math.sin(s * Math.PI * 0.5) * 26;
-        tilt = 0.14 - s * 0.34;
+        lunge = -w * 14;
+        tilt = w * 0.16;
+      } else if (attackProgress < 0.68) {
+        const s = (attackProgress - 0.36) / 0.32;
+        lunge = -14 + Math.sin(s * Math.PI * 0.5) * 46;
+        tilt = 0.16 - s * 0.42;
       } else {
-        // Recover
-        const r = (attackProgress - 0.65) / 0.35;
-        lunge = 18 * (1 - r);
-        tilt = -0.2 * (1 - r);
+        const r = (attackProgress - 0.68) / 0.32;
+        lunge = 32 * (1 - r);
+        tilt = -0.26 * (1 - r);
       }
-    } else if (isAttacking && monster.kind === 'boar') {
-      lunge = Math.sin(attackProgress * Math.PI) * 12;
     }
 
-    const scaleY = 1 - monster.squash * 0.2;
-    const scaleX = 1 + monster.squash * 0.18;
+    const idleBob = !isDying && !isAttacking && !isApproaching ? Math.sin(monster.animTime * 4 + monster.bobOffset) * 0.018 : 0;
+    const scaleY = 1 + idleBob - monster.squash * 0.2;
+    const scaleX = 1 - idleBob + monster.squash * 0.18;
 
     ctx.save();
     if (isDying) {
@@ -1177,13 +1212,13 @@ export class BattleEngine {
     }
 
     // Enemy strike slash arc
-    if (isAttacking && !attackClip && attackProgress > 0.38 && attackProgress < 0.72) {
+    if (isAttacking && attackProgress > 0.36 && attackProgress < 0.72) {
       ctx.save();
       ctx.strokeStyle = monster.isBoss ? 'rgba(255, 162, 72, 0.85)' : 'rgba(255, 224, 178, 0.85)';
       ctx.lineWidth = monster.isBoss ? 5 : 3;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.arc(monster.x - 24, this.ground - spriteHeight * 0.45, monster.isBoss ? 34 : 22, Math.PI * 0.65, Math.PI * 1.35);
+      ctx.arc(monster.x - lunge - 18, this.ground - spriteHeight * 0.45, monster.isBoss ? 34 : 22, Math.PI * 0.65, Math.PI * 1.35);
       ctx.stroke();
       ctx.restore();
     }

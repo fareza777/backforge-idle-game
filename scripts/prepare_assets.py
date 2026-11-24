@@ -79,6 +79,27 @@ for name, path in sprites.items():
         result.thumbnail((700, 900), Image.Resampling.LANCZOS)
         result.save(ART / f"{name}.webp", "WEBP", quality=92, method=6)
 
+# 1b. Dedicated centered head-and-shoulders hero portrait (with breathing headroom)
+hero_sprite_path = ART / "forge-knight-hero.webp"
+if hero_sprite_path.exists():
+    hero_img = Image.open(hero_sprite_path).convert("RGBA")
+    hw, hh = hero_img.size
+    # Head/helmet + upper pauldrons sit in upper-center of trimmed full-body sprite
+    cx = int(hw * 0.52)
+    crop_size = int(min(hw * 0.56, hh * 0.38))
+    left = max(0, min(hw - crop_size, cx - crop_size // 2))
+    top = 0
+    head_crop = hero_img.crop((left, top, left + crop_size, top + crop_size))
+    portrait = Image.new("RGBA", (256, 256), (48, 30, 18, 255))
+    # Subtle warm spotlight behind helmet
+    spotlight = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+    sdraw = ImageDraw.Draw(spotlight)
+    sdraw.ellipse((24, 16, 232, 224), fill=(214, 165, 92, 95))
+    portrait.alpha_composite(spotlight)
+    head_resized = head_crop.resize((216, 216), Image.Resampling.LANCZOS)
+    portrait.alpha_composite(head_resized, (20, 26))
+    portrait.save(ART / "hero-portrait.webp", "WEBP", quality=92, method=6)
+
 # 2. Animation sheets (hero + enemies, normalized baseline & center-of-mass)
 # tuple: (path, cols, rows, fps, mirror_left, cell_inset_px, portrait_name_or_None)
 sheets = {
@@ -121,6 +142,12 @@ for name, (path, columns, rows, fps, mirror_left, inset, portrait_name) in sheet
             cell = chroma_key_green(raw_sheet.crop((left, top, right, bottom)))
             if mirror_left:
                 cell = ImageOps.mirror(cell)
+            if name == "boar-attack":
+                arr = np.asarray(cell).astype(np.float32)
+                arr[..., 0] = np.clip(arr[..., 0] * 0.90, 0, 255)
+                arr[..., 1] = np.clip(arr[..., 1] * 0.88, 0, 255)
+                arr[..., 2] = np.clip(arr[..., 2] * 0.84, 0, 255)
+                cell = Image.fromarray(np.uint8(arr), "RGBA")
             trimmed = trim_alpha(cell)
             cropped_frames.append(trimmed)
             coms.append(center_com_x(trimmed))
