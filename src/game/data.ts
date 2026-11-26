@@ -549,6 +549,7 @@ export function nextBountyAfter(completed: BountyProgress, activeKinds: BountyPr
 export function createDefaultState(now = Date.now()): GameState {
   return {
     schema: 2,
+    nickname: 'Forge Smith',
     gold: 150,
     ore: 15,
     gems: 0,

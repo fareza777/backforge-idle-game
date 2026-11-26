@@ -121,6 +121,9 @@ export function normalizeState(raw: unknown): GameState {
 
   return {
     schema: 2,
+    nickname: typeof value.nickname === 'string' && value.nickname.trim().length >= 2
+      ? value.nickname.trim().slice(0, 20)
+      : defaults.nickname,
     gold: finite(value.gold, defaults.gold),
     ore: finite(value.ore, defaults.ore),
     gems: finite(value.gems, defaults.gems),

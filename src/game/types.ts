@@ -66,6 +66,7 @@ export interface BountyProgress {
 
 export interface GameState {
   schema: 2;
+  nickname: string;
   gold: number;
   ore: number;
   gems: number;
@@ -168,7 +169,13 @@ export interface OfflineReward {
   ore: number;
 }
 
-export type RewardedAction = 'offline-double' | 'free-refresh' | 'extra-slot' | 'revive';
+export type RewardedAction =
+  | 'offline-double'
+  | 'free-refresh'
+  | 'extra-slot'
+  | 'revive'
+  | 'worldboss-ticket'
+  | 'pvp-ticket';
 
 export type ModalName =
   | 'prologue'

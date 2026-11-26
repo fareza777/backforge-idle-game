@@ -538,6 +538,25 @@ export class GameStore {
     this.updateSettings({ theme });
   }
 
+  setNickname(nickname: string): void {
+    const cleaned = nickname.trim().slice(0, 20) || 'Forge Smith';
+    if (this.state.nickname === cleaned) return;
+    this.state = { ...this.state, nickname: cleaned };
+    this.emit();
+    this.scheduleSave();
+  }
+
+  grantOnlineReward(gold: number, ore: number, reason: string): void {
+    this.state = {
+      ...this.state,
+      gold: this.state.gold + Math.max(0, Math.round(gold)),
+      ore: this.state.ore + Math.max(0, Math.round(ore)),
+    };
+    this.event('reward', reason);
+    this.emit();
+    this.scheduleSave();
+  }
+
   upgradeTalent(talent: keyof Talents): boolean {
     const level = this.state.talents[talent];
     if (level >= TALENT_INFO[talent].max) return false;

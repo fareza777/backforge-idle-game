@@ -33,8 +33,10 @@ import {
   ShopPanel,
   TalentsPanel,
 } from './ui/MenuPanels';
+import { OnlinePanel } from './ui/OnlinePanel';
+import { syncRankings } from './platform/online';
 
-type NavView = 'battle' | 'talents' | 'codex' | 'shop';
+type NavView = 'battle' | 'talents' | 'codex' | 'shop' | 'arena';
 type OpenModal = Exclude<ModalName, null>;
 type SplashStep = 'mecha' | 'f7' | 'done';
 
@@ -55,6 +57,7 @@ const navItems: { value: NavView; label: string; icon: IconName }[] = [
   { value: 'battle', label: 'Battle', icon: 'sword' },
   { value: 'talents', label: 'Talents', icon: 'anvil' },
   { value: 'codex', label: 'Codex', icon: 'book' },
+  { value: 'arena', label: 'Arena', icon: 'trophy' },
   { value: 'shop', label: 'Shop', icon: 'shop' },
 ];
 
@@ -263,8 +266,12 @@ export default function App() {
       onSnapshot: setBattle,
       onWaveComplete: (result) => {
         setWaveResult(result);
-        if (result.stageCleared) setModal('stage-clear');
-        else if (result.boss) showToast(`Boss defeated — +${result.gold} Gold, +${result.ore} Ore.`, 'success');
+        if (result.stageCleared) {
+          setModal('stage-clear');
+          void syncRankings(store.getSnapshot());
+        } else if (result.boss) {
+          showToast(`Boss defeated — +${result.gold} Gold, +${result.ore} Ore.`, 'success');
+        }
         if (result.stageCleared || result.boss) void showInterstitialAtBreak();
       },
       onDefeat: () => {
@@ -458,6 +465,7 @@ export default function App() {
   const pageMeta: Record<Exclude<NavView, 'battle'>, { eyebrow: string; title: string; copy: string }> = {
     talents: { eyebrow: 'Permanent progress', title: 'Forge Talents', copy: 'Temper the knight, not just the blade.' },
     codex: { eyebrow: 'Field notes from the valley', title: 'Forge Codex', copy: 'Gear, enemies, and the valley chronicle.' },
+    arena: { eyebrow: 'F7 Shared Network', title: 'Online Arena', copy: 'Global rankings, World Boss raids, and PvP duels.' },
     shop: { eyebrow: 'Optional extras', title: 'Forge Shop', copy: 'Clear choices. Useful rewards. No chance required.' },
   };
 
@@ -749,6 +757,27 @@ export default function App() {
               />
             )}
             {view === 'codex' && <CodexPanel state={state} />}
+            {view === 'arena' && (
+              <OnlinePanel
+                state={state}
+                rewardBusy={rewardBusy}
+                onSetNickname={(name) => store.setNickname(name)}
+                onGrantReward={(gold, ore, reason) => store.grantOnlineReward(gold, ore, reason)}
+                onRewardedTicket={async (action) => {
+                  if (rewardBusy) return false;
+                  setRewardBusy(action);
+                  const earned = await showRewardedAd();
+                  setRewardBusy(null);
+                  if (!earned) showToast('No ticket earned. Try again shortly.', 'error');
+                  return earned;
+                }}
+                onToast={showToast}
+                onSound={(s) => {
+                  audioRef.current?.unlock();
+                  audioRef.current?.play(s);
+                }}
+              />
+            )}
             {view === 'shop' && (
               <ShopPanel
                 state={state}

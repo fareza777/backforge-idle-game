@@ -269,3 +269,79 @@ describe('v1.1.0 expansions: new gear, bonds, smelting, bounties, story & ascens
     expect(store.getSnapshot().stage).toBe(1);
   });
 });
+
+import { F7RankClient } from '../src/platform/f7RankSdk';
+import {
+  buildPvpSnapshot,
+  computeForgePower,
+  generateBotOpponents,
+  loadoutFromSnapshot,
+  resolveWorldBossTheme,
+} from '../src/platform/online';
+
+describe('online features: F7RankClient offline-first SDK, World Boss & Async PvP', () => {
+  it('queues scores offline and flushes when network returns', async () => {
+    const store = new Map<string, string>();
+    let online = false;
+    const mockFetch = (async (url: string) => {
+      if (!online) throw new Error('Network offline');
+      if (url.endsWith('/v1/auth/anon')) {
+        return new Response(JSON.stringify({
+          playerId: 'p1',
+          gameId: 'backforge_idle',
+          token: 'tok_1234567890abcdef',
+          nickname: 'Smith',
+          country: 'ID',
+          recoveryCode: 'F7-ABCD-1234',
+        }), { status: 201 });
+      }
+      if (url.endsWith('/v1/scores/submit')) {
+        return new Response(JSON.stringify({ ok: true, results: [{ boardId: 'power', accepted: true }] }), { status: 200 });
+      }
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const client = new F7RankClient({
+      baseUrl: 'https://f7-rank-api.fajar-mreza.workers.dev',
+      gameId: 'backforge_idle',
+      storage: {
+        get: (k) => store.get(k) ?? null,
+        set: (k, v) => { store.set(k, v); },
+      },
+      fetchImpl: mockFetch,
+    });
+
+    const offlineRes = await client.submitScores([{ boardId: 'power', score: 420 }]);
+    expect(offlineRes.ok).toBe(false);
+    expect(await client.getPendingCount()).toBe(1);
+
+    online = true;
+    const flushRes = await client.flushQueue('Smith');
+    expect(flushRes.ok).toBe(true);
+    expect(flushRes.flushed).toBe(1);
+    expect(await client.getPendingCount()).toBe(0);
+  });
+
+  it('builds compact PvP snapshots under 2048 bytes and valid bot opponents', () => {
+    const state = createDefaultState();
+    const power = computeForgePower(state);
+    expect(power).toBeGreaterThanOrEqual(20);
+    const snap = buildPvpSnapshot(state);
+    expect(JSON.stringify(snap).length).toBeLessThan(2048);
+
+    const bots = generateBotOpponents(power, 1000);
+    expect(bots.length).toBe(3);
+    const rivalLoadout = loadoutFromSnapshot(bots[0].snapshot, bots[0].power);
+    expect(rivalLoadout.weapons.length).toBeGreaterThan(0);
+  });
+
+  it('maps World Boss themes to distinct BackForge Idle names', () => {
+    const t1 = resolveWorldBossTheme({ bossId: 'anvil_titan', title: 'Ironcrown Anvil Titan' });
+    const t2 = resolveWorldBossTheme({ bossId: 'furnace_behemoth', title: 'Grand Furnace Behemoth' });
+    const t3 = resolveWorldBossTheme({ bossId: 'frostforge_automaton', title: 'Frostforge Automaton' });
+    expect(t1.title).toBe('Ironcrown Anvil Titan');
+    expect(t2.title).toBe('Grand Furnace Behemoth');
+    expect(t3.title).toBe('Frostforge Automaton');
+    expect(t1.title).not.toMatch(/Umbral|Ignis|Leviathan/);
+  });
+});
