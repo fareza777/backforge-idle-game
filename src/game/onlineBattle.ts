@@ -13,11 +13,28 @@ export interface OnlineBattleSnapshot {
   heroMaxHp: number;
   enemyHp: number;
   enemyMaxHp: number;
+  bossFuryTier: number;
   overdrive: number;
   overdriveReady: boolean;
   speed: 1 | 2;
   finished: boolean;
   won: boolean | null;
+}
+
+export function worldBossStrikeDamage(
+  hitNumber: number,
+  elapsedSeconds: number,
+  heroArmor: number,
+): { damage: number; isCrush: boolean } {
+  const isCrush = hitNumber > 0 && hitNumber % 3 === 0;
+  const furyTier = Math.floor(Math.max(0, elapsedSeconds) / 4);
+  const furyMul = 1 + furyTier * 0.28;
+  const raw = 44 * (isCrush ? 1.65 : 1) * furyMul;
+  const reduction = 100 / (100 + Math.max(0, heroArmor) * 7);
+  return {
+    damage: Math.max(1, Math.round(raw * reduction)),
+    isCrush,
+  };
 }
 
 interface OnlineBattleOptions {
@@ -158,11 +175,15 @@ export class OnlineBattleEngine {
   private hero: FighterState;
   private rival: FighterState;
   private bossX = 280;
+  private bossMoving = false;
+  private bossWalkTime = 0;
   private bossAnimTime = 0;
   private bossAttackTimer = 0.7;
   private bossAttackAnim = 0;
   private bossAttackDuration = 0.78;
   private bossHitApplied = false;
+  private bossHitCount = 0;
+  private bossNextCrush = false;
   private bossHitFlash = 0;
   private bossSquash = 0;
   private bossBurnTime = 0;
@@ -471,14 +492,16 @@ export class OnlineBattleEngine {
     this.hero.moving = Math.abs(heroDist) > 4;
     this.hero.x += heroDist * Math.min(1, dt * 3.6);
 
-    const bossDist = bossTargetX - this.bossX;
-    if (Math.abs(bossDist) > 4) {
-      this.bossX += bossDist * Math.min(1, dt * 2.8);
-    }
-
     // World boss timers & animated attacks
     const slowMul = this.bossSlowTime > 0 ? 0.72 : 1;
     this.bossAnimTime += dt * slowMul;
+
+    const bossDist = bossTargetX - this.bossX;
+    this.bossMoving = Math.abs(bossDist) > 4;
+    if (this.bossMoving) {
+      this.bossX += bossDist * Math.min(1, dt * 2.8);
+      this.bossWalkTime += dt * slowMul * 0.65;
+    }
     this.bossHitFlash = Math.max(0, this.bossHitFlash - dt);
     this.bossSquash = Math.max(0, this.bossSquash - dt * 2.4);
     this.bossBurnTime = Math.max(0, this.bossBurnTime - dt);
@@ -510,12 +533,47 @@ export class OnlineBattleEngine {
         const progress = 1 - this.bossAttackAnim / this.bossAttackDuration;
         if (!this.bossHitApplied && progress >= 0.46) {
           this.bossHitApplied = true;
-          this.shake = Math.max(this.shake, 5.5);
+          this.bossHitCount += 1;
+          const { damage, isCrush } = worldBossStrikeDamage(
+            this.bossHitCount,
+            this.elapsed,
+            this.opts.heroLoadout.armor,
+          );
+          this.hero.hp = Math.max(0, this.hero.hp - damage);
+          this.shake = Math.max(this.shake, isCrush ? 8.5 : 5.5);
+          if (isCrush) this.hitStop = Math.max(this.hitStop, 0.04);
           this.hero.hitFlash = 0.16;
-          this.hero.squash = 0.18;
-          this.overdrive = Math.min(100, this.overdrive + 14 * this.opts.heroLoadout.overdriveRate);
-          this.opts.onSound?.('hit');
-          this.burst(this.hero.x + 28, this.ground - 36, this.opts.worldBossTheme?.auraColor ?? '#f0b84b', 10, 'spark');
+          this.hero.squash = isCrush ? 0.28 : 0.18;
+          this.overdrive = Math.min(100, this.overdrive + (isCrush ? 20 : 14) * this.opts.heroLoadout.overdriveRate);
+          this.opts.onSound?.(isCrush ? 'hammer' : 'hit');
+          this.floaters.push({
+            x: this.hero.x + (Math.random() - 0.5) * 14,
+            y: this.ground - this.height * 0.5,
+            text: isCrush ? `CRUSH -${damage}!` : `-${damage}`,
+            color: isCrush ? '#ff4a3d' : '#e55c55',
+            life: 0.85,
+            size: isCrush ? 20 : 17,
+          });
+          if (this.opts.heroLoadout.thornsDamage > 0) {
+            const thorns = this.opts.heroLoadout.thornsDamage;
+            this.totalDamage += thorns;
+            this.bossHitFlash = 0.08;
+            this.floaters.push({
+              x: this.bossX - 18,
+              y: this.ground - this.height * 0.48,
+              text: `-${thorns}`,
+              color: '#f5b84c',
+              life: 0.55,
+              size: 14,
+            });
+          }
+          this.burst(
+            this.hero.x + 28,
+            this.ground - 36,
+            isCrush ? '#ff5b45' : (this.opts.worldBossTheme?.auraColor ?? '#f0b84b'),
+            isCrush ? 14 : 10,
+            'spark',
+          );
           this.particles.push({
             kind: 'ring',
             x: this.bossX - 42,
@@ -524,10 +582,14 @@ export class OnlineBattleEngine {
             vy: 0,
             life: 0.35,
             maxLife: 0.35,
-            size: 26,
-            color: this.opts.worldBossTheme?.auraColor ?? '#f0b84b',
+            size: isCrush ? 34 : 26,
+            color: isCrush ? '#ff5b45' : (this.opts.worldBossTheme?.auraColor ?? '#f0b84b'),
             rotation: 0,
           });
+          if (this.hero.hp <= 0) {
+            this.conclude(false);
+            return;
+          }
         }
       } else if (Math.abs(bossDist) <= 12) {
         this.bossAttackTimer -= dt * slowMul;
@@ -535,6 +597,7 @@ export class OnlineBattleEngine {
           this.bossAttackTimer = 1.65;
           this.bossAttackAnim = this.bossAttackDuration;
           this.bossHitApplied = false;
+          this.bossNextCrush = (this.bossHitCount + 1) % 3 === 0;
         }
       }
     }
@@ -853,8 +916,14 @@ export class OnlineBattleEngine {
     this.rival.moving = false;
     this.opts.onSound?.('victory');
     this.banner = {
-      text: this.opts.mode === 'worldboss' ? 'RAID COMPLETE' : won ? 'DUEL VICTORY!' : 'DUEL DEFEAT',
-      subtext: this.opts.mode === 'worldboss' ? `${Math.round(this.totalDamage).toLocaleString()} Total Damage` : won ? 'Arena Rating Up' : 'Reforge & Try Again',
+      text: this.opts.mode === 'worldboss'
+        ? (won ? 'SURVIVED FULL RAID!' : 'KNIGHT FALLEN')
+        : won ? 'DUEL VICTORY!' : 'DUEL DEFEAT',
+      subtext: this.opts.mode === 'worldboss'
+        ? (won
+          ? `${Math.round(this.totalDamage).toLocaleString()} Total Damage`
+          : `Survived ${this.elapsed.toFixed(1)}s · ${Math.round(this.totalDamage).toLocaleString()} DMG`)
+        : won ? 'Arena Rating Up' : 'Reforge & Try Again',
       life: 1.4,
       maxLife: 1.4,
     };
@@ -971,7 +1040,11 @@ export class OnlineBattleEngine {
     const isAttacking = this.bossAttackAnim > 0;
     const clip = isAttacking && theme?.attackClip ? theme.attackClip : walkClip;
     const progress = isAttacking ? 1 - this.bossAttackAnim / this.bossAttackDuration : 0;
-    const animTime = isAttacking && theme?.attackClip ? progress * this.bossAttackDuration : this.bossAnimTime;
+    const animTime = isAttacking && theme?.attackClip
+      ? progress * this.bossAttackDuration
+      : this.bossMoving
+        ? this.bossWalkTime
+        : 0;
     const image = this.animationFrame(clip, animTime) ?? this.images.get('worldboss');
 
     const spriteH = Math.min(this.height * 0.58, 152);
@@ -995,7 +1068,7 @@ export class OnlineBattleEngine {
       }
     }
 
-    const breathe = !isAttacking ? Math.sin(this.bossAnimTime * 4) * 0.02 : 0;
+    const breathe = !isAttacking && !this.bossMoving ? Math.sin(this.bossAnimTime * 2.2) * 0.018 : 0;
     const scaleY = 1 + breathe - this.bossSquash * 0.18;
     const scaleX = 1 - breathe + this.bossSquash * 0.16;
     const aura = theme?.auraColor ?? '#f0b84b';
@@ -1016,10 +1089,21 @@ export class OnlineBattleEngine {
     ctx.fill();
 
     if (isAttacking && progress < 0.42) {
-      ctx.strokeStyle = `rgba(232, 82, 52, ${0.65 * (1 - progress / 0.42)})`;
-      ctx.lineWidth = 3;
+      const alpha = (this.bossNextCrush ? 0.9 : 0.65) * (1 - progress / 0.42);
+      ctx.strokeStyle = this.bossNextCrush
+        ? `rgba(255, 56, 44, ${alpha})`
+        : `rgba(232, 82, 52, ${alpha})`;
+      ctx.lineWidth = this.bossNextCrush ? 4.5 : 3;
       ctx.beginPath();
-      ctx.ellipse(this.bossX - lunge, this.ground + 3, spriteW * 0.46, 12, 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        this.bossX - lunge,
+        this.ground + 3,
+        spriteW * (this.bossNextCrush ? 0.52 : 0.46),
+        this.bossNextCrush ? 14 : 12,
+        0,
+        0,
+        Math.PI * 2,
+      );
       ctx.stroke();
     }
 
@@ -1157,6 +1241,7 @@ export class OnlineBattleEngine {
       heroMaxHp: this.hero.maxHp,
       enemyHp: this.opts.mode === 'worldboss' ? Math.max(0, 1) : Math.max(0, Math.ceil(this.rival.hp)),
       enemyMaxHp: this.opts.mode === 'worldboss' ? 1 : this.rival.maxHp,
+      bossFuryTier: 1 + Math.floor(Math.max(0, this.elapsed) / 4),
       overdrive: Math.min(100, Math.floor(this.overdrive)),
       overdriveReady: this.overdrive >= 100,
       speed: this.speed,

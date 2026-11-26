@@ -12,6 +12,7 @@ import {
 } from '../src/game/data';
 import { BACKUP_KEY, SAVE_KEY, loadState, saveState, type StorageLike } from '../src/game/save';
 import { GameStore } from '../src/game/store';
+import { worldBossStrikeDamage } from '../src/game/onlineBattle';
 
 class MemoryStorage implements StorageLike {
   values = new Map<string, string>();
@@ -343,5 +344,28 @@ describe('online features: F7RankClient offline-first SDK, World Boss & Async Pv
     expect(t2.title).toBe('Grand Furnace Behemoth');
     expect(t3.title).toBe('Frostforge Automaton');
     expect(t1.title).not.toMatch(/Umbral|Ignis|Leviathan/);
+  });
+
+  it('tunes World Boss strikes so starter heroes fall quickly while high-armor heroes endure', () => {
+    const h1 = worldBossStrikeDamage(1, 1.1, 4);
+    const h2 = worldBossStrikeDamage(2, 2.8, 4);
+    const h3 = worldBossStrikeDamage(3, 4.5, 4);
+    expect(h1.isCrush).toBe(false);
+    expect(h2.isCrush).toBe(false);
+    expect(h3.isCrush).toBe(true);
+    expect(h3.damage).toBeGreaterThan(h2.damage);
+    expect(h1.damage + h2.damage + h3.damage).toBeGreaterThanOrEqual(100);
+
+    // Fury scales over time
+    const early = worldBossStrikeDamage(1, 1.0, 20);
+    const late = worldBossStrikeDamage(1, 13.0, 20);
+    expect(late.damage).toBeGreaterThan(early.damage);
+
+    // High-armor knight (550 HP, 55 Armor) mitigates heavily and survives 10 strikes
+    let totalTankDmg = 0;
+    for (let hit = 1; hit <= 10; hit += 1) {
+      totalTankDmg += worldBossStrikeDamage(hit, hit * 1.65, 55).damage;
+    }
+    expect(totalTankDmg).toBeLessThan(550);
   });
 });

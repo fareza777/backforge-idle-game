@@ -191,11 +191,19 @@ export function OnlinePanel({
               meta: { stage: state.highestStage, asc: state.ascensions },
               nickname: state.nickname,
             });
-            setWbLastResult(`Submitted ${formatNum(res.acceptedDamage)} DMG! Total: ${formatNum(res.totalDamage)} (${res.runsToday}/${wbExtraTicket ? 4 : 3} today)`);
+            setWbLastResult(
+              won
+                ? `Survived! Submitted ${formatNum(res.acceptedDamage)} DMG! Total: ${formatNum(res.totalDamage)} (${res.runsToday}/${wbExtraTicket ? 4 : 3} today)`
+                : `Knight fell after dealing ${formatNum(res.acceptedDamage)} DMG — submitted! Total: ${formatNum(res.totalDamage)} (${res.runsToday}/${wbExtraTicket ? 4 : 3} today)`,
+            );
             onGrantReward(goldGain, oreGain, `World Boss Raid: +${goldGain} Gold, +${oreGain} Ore`);
             void loadWorldBoss();
           } catch {
-            setWbLastResult(`Offline Practice Raid: ${formatNum(damage)} DMG dealt!`);
+            setWbLastResult(
+              won
+                ? `Offline Practice Raid: ${formatNum(damage)} DMG dealt!`
+                : `Knight fell after dealing ${formatNum(damage)} DMG (offline)!`,
+            );
             onGrantReward(Math.round(goldGain * 0.7), Math.max(2, oreGain - 1), `Offline Raid: +${Math.round(goldGain * 0.7)} Gold`);
           }
           void refreshPending();
@@ -397,6 +405,18 @@ export function OnlinePanel({
               </div>
             </div>
 
+            {activeMatch.mode === 'worldboss' && liveSnap && (
+              <div className="wb-live-hud">
+                <div className="pvp-hp-box wb-knight-hp">
+                  <small>Forge Knight ({liveSnap.heroHp}/{liveSnap.heroMaxHp})</small>
+                  <div className="hero-health-track"><span style={{ width: `${(liveSnap.heroHp / Math.max(1, liveSnap.heroMaxHp)) * 100}%` }} /></div>
+                </div>
+                <span className={`fury-badge ${liveSnap.bossFuryTier >= 3 ? 'is-high' : ''}`}>
+                  Titan Fury ×{liveSnap.bossFuryTier}
+                </span>
+              </div>
+            )}
+
             {activeMatch.mode === 'pvp' && liveSnap && (
               <div className="pvp-hp-bars">
                 <div className="pvp-hp-box">
@@ -496,6 +516,7 @@ export function OnlinePanel({
               <span className="eyebrow">{wbTheme.subtitle} · {wbData ? formatCountdown(wbData.boss.endsAt) : 'Weekly'}</span>
               <h3>{wbTheme.title}</h3>
               <p className="justified">{wbTheme.lore}</p>
+              <small className="wb-tactic-hint">Heavy Titan strikes escalate every 4s. Equip Armor, Vials, Frost &amp; Stuns to survive all 18s.</small>
             </div>
           </article>
 
