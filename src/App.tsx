@@ -4,6 +4,12 @@ import { GameAudio } from './game/audio';
 import { BattleEngine, type BattleSnapshot } from './game/battle';
 import { chapterForStage, PROLOGUE_STORY } from './game/story';
 import { GameStore } from './game/store';
+import {
+  voClipForChapterBoss,
+  voClipForChapterChronicle,
+  voClipForChapterIntro,
+  type VoiceClipId,
+} from './game/voice';
 import type { GameSettings, ModalName, RewardedAction, Theme } from './game/types';
 import {
   hideBannerAd,
@@ -116,9 +122,12 @@ export default function App() {
   const [rewardBusy, setRewardBusy] = useState<RewardedAction | null>(null);
   const [purchaseBusy, setPurchaseBusy] = useState(false);
   const [nativeAdSpace, setNativeAdSpace] = useState(false);
+  const [activeVoice, setActiveVoice] = useState<VoiceClipId | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<BattleEngine | null>(null);
   const audioRef = useRef<GameAudio | null>(null);
+  const lastOnboardVoRef = useRef<number>(-1);
+  const lastModalVoRef = useRef<string>('');
   if (!audioRef.current) audioRef.current = new GameAudio(state.settings);
 
   const loadout = useMemo(
@@ -161,7 +170,7 @@ export default function App() {
 
   useEffect(() => {
     if (!dispatchBanner) return;
-    const timer = setTimeout(() => setDispatchBanner(null), 4600);
+    const timer = setTimeout(() => setDispatchBanner(null), 7500);
     return () => clearTimeout(timer);
   }, [dispatchBanner]);
 
@@ -191,8 +200,40 @@ export default function App() {
       const info = chapterForStage(state.stage);
       store.markChapterSeen(state.stage);
       setDispatchBanner({ title: `Chapter ${info.roman} · ${info.title}`, quote: info.introQuote });
+      audioRef.current?.playVoice(voClipForChapterIntro(state.stage));
     }
   }, [splash, state.seenChapters, state.stage, store]);
+
+  useEffect(() => {
+    const unsub = audioRef.current?.subscribeVoice(setActiveVoice);
+    return () => {
+      unsub?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (splash !== 'done' || modal !== null) return;
+    if (state.onboardingDone || state.onboardingStep >= 3) return;
+    if (lastOnboardVoRef.current === state.onboardingStep) return;
+    lastOnboardVoRef.current = state.onboardingStep;
+    audioRef.current?.playVoice(`onboard-${state.onboardingStep}` as VoiceClipId);
+  }, [modal, splash, state.onboardingDone, state.onboardingStep]);
+
+  useEffect(() => {
+    if (splash !== 'done') return;
+    if (modal === 'prologue' && lastModalVoRef.current !== 'prologue') {
+      lastModalVoRef.current = 'prologue';
+      audioRef.current?.playVoice('prologue');
+    } else if (modal === 'stage-clear' && lastModalVoRef.current !== `clear-${state.stage}`) {
+      lastModalVoRef.current = `clear-${state.stage}`;
+      audioRef.current?.playVoice(voClipForChapterChronicle(Math.max(1, state.stage - 1)));
+    } else if (modal === 'defeat' && lastModalVoRef.current !== `defeat-${Date.now().toString().slice(0, -3)}`) {
+      lastModalVoRef.current = `defeat-${Date.now().toString().slice(0, -3)}`;
+      audioRef.current?.playVoice('defeat');
+    } else if (modal === null) {
+      lastModalVoRef.current = '';
+    }
+  }, [modal, splash, state.stage]);
 
   useEffect(() => {
     if (store.recovered) showToast('Your last safe forge backup was restored.', 'success');
@@ -200,7 +241,10 @@ export default function App() {
     window.addEventListener('pointerdown', unlock, { once: true });
     const playTimer = setInterval(() => store.addPlaySeconds(15), 15000);
     const persist = () => store.persistNow();
-    const touch = () => store.touchSeen();
+    const touch = () => {
+      store.touchSeen();
+      if (document.hidden) audioRef.current?.stopVoice();
+    };
     window.addEventListener('beforeunload', persist);
     document.addEventListener('visibilitychange', touch);
     return () => {
@@ -238,8 +282,14 @@ export default function App() {
     document.documentElement.dataset.theme = state.settings.theme;
     const themeColor = state.settings.theme === 'dark' ? '#15120F' : state.settings.theme === 'warm' ? '#3B2418' : '#F4E8CF';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
-    const volume = state.settings.sfx ? state.settings.sfxVolume : state.settings.ambience ? state.settings.ambienceVolume : 0;
-    void updateAdMute(!state.settings.sfx && !state.settings.ambience, volume);
+    const volume = state.settings.sfx
+      ? state.settings.sfxVolume
+      : state.settings.voice
+        ? state.settings.voiceVolume
+        : state.settings.ambience
+          ? state.settings.ambienceVolume
+          : 0;
+    void updateAdMute(!state.settings.sfx && !state.settings.ambience && !state.settings.voice, volume);
   }, [state.settings]);
 
   useEffect(() => {
@@ -280,6 +330,11 @@ export default function App() {
       },
       onEnemyDefeated: (kind) => store.recordEnemyDefeat(kind),
       onOverdrive: () => store.recordOverdrive(),
+      onBossWave: (stage) => {
+        const info = chapterForStage(stage);
+        setDispatchBanner({ title: info.bossTitle, quote: info.bossIntro });
+        audioRef.current?.playVoice(voClipForChapterBoss(stage));
+      },
       onSound: (sound) => audioRef.current?.play(sound),
     });
     engineRef.current = engine;
@@ -322,6 +377,7 @@ export default function App() {
 
   function returnToCamp() {
     press();
+    audioRef.current?.stopVoice();
     engineRef.current?.reset();
     setModal(null);
   }
@@ -425,6 +481,7 @@ export default function App() {
 
   function closeModal() {
     press();
+    audioRef.current?.stopVoice();
     if (modal === 'prologue') store.markPrologueSeen();
     setModal(null);
   }
@@ -480,6 +537,7 @@ export default function App() {
     modalTitle = PROLOGUE_STORY.title;
     modalEyebrow = PROLOGUE_STORY.eyebrow;
     modalClose = () => {
+      audioRef.current?.stopVoice();
       store.markPrologueSeen();
       setModal(null);
     };
@@ -488,6 +546,17 @@ export default function App() {
         <div className="prologue-hero">
           <img src="/art/forge-knight-hero.webp" alt="Forge Knight" />
         </div>
+        <button
+          type="button"
+          className={`vo-pill-btn ${activeVoice === 'prologue' ? 'is-playing' : ''}`}
+          onClick={() => {
+            audioRef.current?.unlock();
+            audioRef.current?.toggleVoice('prologue');
+          }}
+        >
+          <Icon name="volume" size={15} />
+          <span>{activeVoice === 'prologue' ? 'Stop Narration' : 'Listen Narration'}</span>
+        </button>
         {PROLOGUE_STORY.paragraphs.map((paragraph, idx) => (
           <p className="justified" key={idx}>{paragraph}</p>
         ))}
@@ -495,6 +564,7 @@ export default function App() {
           className="forge-button forge-button--primary"
           onClick={() => {
             press();
+            audioRef.current?.stopVoice();
             store.markPrologueSeen();
             setModal(null);
           }}
@@ -548,6 +618,17 @@ export default function App() {
           <span>F7 Developer</span>
         </div>
         <p className="about-lead justified">The valley’s old forge has gone quiet. You are the smith who will wake it — one blade, one brave knight, and one impossible pack at a time.</p>
+        <button
+          type="button"
+          className={`vo-pill-btn ${activeVoice === 'about-story' ? 'is-playing' : ''}`}
+          onClick={() => {
+            audioRef.current?.unlock();
+            audioRef.current?.toggleVoice('about-story');
+          }}
+        >
+          <Icon name="volume" size={15} />
+          <span>{activeVoice === 'about-story' ? 'Stop Story' : 'Listen Story'}</span>
+        </button>
         <p className="justified">Backpack Forge is a cozy fantasy auto-battler about making space, choosing what to carry, and finding the small arrangement that changes a whole fight. No paid lootboxes. No forced watching. Just a good blade and a better plan.</p>
         <div className="about-actions"><button className="forge-button" onClick={() => void handleShare()}><Icon name="share" size={18} />Share the Forge</button><button className="forge-button" onClick={handleRate}><Icon name="star" size={18} />Rate on Google Play</button></div>
         <p className="build-label">Version 1.1.0 · Android, portrait, one-handed · English</p>
@@ -600,6 +681,17 @@ export default function App() {
         <div className="victory-crest"><Icon name="trophy" size={58} /></div>
         <p className="reward-lead">Chapter {clearedChapter.roman} complete. <strong>{chapter.title}</strong> is ready.</p>
         {waveResult && <div className="reward-totals"><div><Icon name="coin" size={28} /><strong>+{waveResult.gold}</strong><span>Gold</span></div><div><Icon name="ore" size={28} /><strong>+{waveResult.ore}</strong><span>Ore</span></div></div>}
+        <button
+          type="button"
+          className={`vo-pill-btn ${activeVoice === voClipForChapterChronicle(clearedChapter.chapterNumber) ? 'is-playing' : ''}`}
+          onClick={() => {
+            audioRef.current?.unlock();
+            audioRef.current?.toggleVoice(voClipForChapterChronicle(clearedChapter.chapterNumber));
+          }}
+        >
+          <Icon name="volume" size={15} />
+          <span>{activeVoice === voClipForChapterChronicle(clearedChapter.chapterNumber) ? 'Stop Chronicle' : 'Listen Chronicle'}</span>
+        </button>
         <p className="justified">{clearedChapter.chronicleEntry}</p>
         <button className="forge-button forge-button--primary" onClick={closeModal}><Icon name="arrowRight" size={20} />Enter Stage {state.stage}</button>
       </div>
@@ -640,7 +732,14 @@ export default function App() {
             </div>
 
             {dispatchBanner && (
-              <button type="button" className="story-dispatch" onClick={() => setDispatchBanner(null)}>
+              <button
+                type="button"
+                className="story-dispatch"
+                onClick={() => {
+                  setDispatchBanner(null);
+                  audioRef.current?.stopVoice();
+                }}
+              >
                 <strong>{dispatchBanner.title}</strong>
                 <span>{dispatchBanner.quote}</span>
               </button>
@@ -703,7 +802,12 @@ export default function App() {
                 return store.salvageItem(slot);
               }}
               onAdvanceOnboarding={() => { press(); store.advanceOnboarding(); }}
-              onSkipOnboarding={() => { press(); store.finishOnboarding(); }}
+              onSkipOnboarding={() => { press(); audioRef.current?.stopVoice(); store.finishOnboarding(); }}
+              activeVoice={activeVoice}
+              onToggleVoice={(id) => {
+                audioRef.current?.unlock();
+                audioRef.current?.toggleVoice(id);
+              }}
             />
           </div>
 
@@ -756,11 +860,30 @@ export default function App() {
                 }}
               />
             )}
-            {view === 'codex' && <CodexPanel state={state} />}
+            {view === 'codex' && (
+              <CodexPanel
+                state={state}
+                activeVoice={activeVoice}
+                onToggleVoice={(id) => {
+                  audioRef.current?.unlock();
+                  audioRef.current?.toggleVoice(id);
+                }}
+              />
+            )}
             {view === 'arena' && (
               <OnlinePanel
                 state={state}
                 rewardBusy={rewardBusy}
+                activeVoice={activeVoice}
+                onToggleVoice={(id) => {
+                  audioRef.current?.unlock();
+                  audioRef.current?.toggleVoice(id);
+                }}
+                onPlayVoice={(id) => {
+                  audioRef.current?.unlock();
+                  audioRef.current?.playVoice(id);
+                }}
+                onStopVoice={() => audioRef.current?.stopVoice()}
                 onSetNickname={(name) => store.setNickname(name)}
                 onGrantReward={(gold, ore, reason) => store.grantOnlineReward(gold, ore, reason)}
                 onRewardedTicket={async (action) => {

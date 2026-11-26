@@ -47,8 +47,10 @@ export interface GameSettings {
   theme: Theme;
   sfx: boolean;
   ambience: boolean;
+  voice: boolean;
   sfxVolume: number;
   ambienceVolume: number;
+  voiceVolume: number;
   haptics: boolean;
 }
 

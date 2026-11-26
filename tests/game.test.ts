@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   backpackDimensions,
@@ -13,6 +15,13 @@ import {
 import { BACKUP_KEY, SAVE_KEY, loadState, saveState, type StorageLike } from '../src/game/save';
 import { GameStore } from '../src/game/store';
 import { onlineGroundRatio, worldBossStrikeDamage } from '../src/game/onlineBattle';
+import {
+  VO_CLIP_PATHS,
+  voClipForChapterBoss,
+  voClipForChapterChronicle,
+  voClipForChapterIntro,
+  voClipForWorldBoss,
+} from '../src/game/voice';
 
 class MemoryStorage implements StorageLike {
   values = new Map<string, string>();
@@ -372,5 +381,31 @@ describe('online features: F7RankClient offline-first SDK, World Boss & Async Pv
   it('grounds PvP and World Boss fighters on the stone arena floor', () => {
     expect(onlineGroundRatio('pvp')).toBeGreaterThanOrEqual(0.88);
     expect(onlineGroundRatio('worldboss')).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it('ships valid Deepgram VO MP3 assets for every story, boss, and onboarding clip', () => {
+    const entries = Object.entries(VO_CLIP_PATHS);
+    expect(entries.length).toBe(33);
+    for (const [, relPath] of entries) {
+      const fullPath = path.resolve(process.cwd(), 'public', relPath.replace(/^\//, ''));
+      expect(fs.existsSync(fullPath)).toBe(true);
+      expect(fs.statSync(fullPath).size).toBeGreaterThan(2000);
+    }
+
+    for (let stage = 1; stage <= 12; stage += 1) {
+      expect(VO_CLIP_PATHS[voClipForChapterIntro(stage)]).toMatch(/^\/audio\/vo\/ch[1-8]-intro\.mp3$/);
+      expect(VO_CLIP_PATHS[voClipForChapterBoss(stage)]).toMatch(/^\/audio\/vo\/ch[1-8]-boss\.mp3$/);
+      expect(VO_CLIP_PATHS[voClipForChapterChronicle(stage)]).toMatch(/^\/audio\/vo\/ch[1-8]-chronicle\.mp3$/);
+    }
+
+    expect(voClipForWorldBoss('anvil_titan')).toBe('wb-anvil_titan');
+    expect(voClipForWorldBoss('furnace_behemoth')).toBe('wb-furnace_behemoth');
+    expect(voClipForWorldBoss('frostforge_automaton')).toBe('wb-frostforge_automaton');
+
+    const { state: legacySave } = loadState(
+      new MemoryStorage(),
+    );
+    expect(legacySave.settings.voice).toBe(true);
+    expect(legacySave.settings.voiceVolume).toBe(0.9);
   });
 });

@@ -1,4 +1,5 @@
 import type { GameSettings } from './types';
+import { VO_CLIP_PATHS, type VoiceClipId } from './voice';
 
 export type SoundName =
   | 'click'
@@ -25,9 +26,80 @@ export class GameAudio {
   private ambienceTimer: ReturnType<typeof setInterval> | null = null;
   private settings: GameSettings;
   private lastPlayed = new Map<SoundName, number>();
+  private voAudio: HTMLAudioElement | null = null;
+  private activeVo: VoiceClipId | null = null;
+  private voListeners = new Set<(id: VoiceClipId | null) => void>();
 
   constructor(settings: GameSettings) {
     this.settings = settings;
+  }
+
+  getActiveVoice(): VoiceClipId | null {
+    return this.activeVo;
+  }
+
+  subscribeVoice(listener: (id: VoiceClipId | null) => void): () => void {
+    this.voListeners.add(listener);
+    return () => {
+      this.voListeners.delete(listener);
+    };
+  }
+
+  private notifyVoice(): void {
+    this.voListeners.forEach((listener) => listener(this.activeVo));
+  }
+
+  playVoice(clipId: VoiceClipId): void {
+    if (!this.settings.voice || this.settings.voiceVolume <= 0) return;
+    if (typeof Audio === 'undefined') return;
+    this.stopVoice();
+    const audio = new Audio(VO_CLIP_PATHS[clipId]);
+    audio.volume = Math.min(1, Math.max(0, this.settings.voiceVolume));
+    audio.preload = 'auto';
+    audio.onended = () => {
+      if (this.voAudio === audio) {
+        this.voAudio = null;
+        this.activeVo = null;
+        this.notifyVoice();
+      }
+    };
+    audio.onerror = () => {
+      if (this.voAudio === audio) {
+        this.voAudio = null;
+        this.activeVo = null;
+        this.notifyVoice();
+      }
+    };
+    this.voAudio = audio;
+    this.activeVo = clipId;
+    this.notifyVoice();
+    void audio.play().catch(() => {
+      if (this.voAudio === audio) {
+        this.stopVoice();
+      }
+    });
+  }
+
+  toggleVoice(clipId: VoiceClipId): void {
+    if (this.activeVo === clipId) {
+      this.stopVoice();
+    } else {
+      this.playVoice(clipId);
+    }
+  }
+
+  stopVoice(): void {
+    if (this.voAudio) {
+      this.voAudio.onended = null;
+      this.voAudio.onerror = null;
+      this.voAudio.pause();
+      this.voAudio.src = '';
+      this.voAudio = null;
+    }
+    if (this.activeVo !== null) {
+      this.activeVo = null;
+      this.notifyVoice();
+    }
   }
 
   updateSettings(settings: GameSettings): void {
@@ -37,6 +109,12 @@ export class GameAudio {
     }
     if (this.ambienceGain && this.context) {
       this.ambienceGain.gain.setTargetAtTime(settings.ambience ? settings.ambienceVolume * 0.22 : 0, this.context.currentTime, 0.08);
+    }
+    if (this.voAudio) {
+      this.voAudio.volume = Math.min(1, Math.max(0, settings.voiceVolume));
+    }
+    if (!settings.voice || settings.voiceVolume <= 0) {
+      this.stopVoice();
     }
     if (settings.ambience) this.startAmbience();
     else this.stopAmbience();
@@ -203,6 +281,7 @@ export class GameAudio {
   }
 
   dispose(): void {
+    this.stopVoice();
     this.stopAmbience();
     if (this.context) void this.context.close();
     this.context = null;

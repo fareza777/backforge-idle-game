@@ -10,6 +10,7 @@ import {
   talentCost,
 } from '../game/data';
 import { CHAPTERS, ENEMY_BESTIARY, PROLOGUE_STORY } from '../game/story';
+import { voClipForChapterChronicle, voClipForChapterIntro, type VoiceClipId } from '../game/voice';
 import type { GameSettings, GameState, ItemCategory, ItemKind, RewardedAction, Talents, Theme } from '../game/types';
 import { isNativePlatform, usingTestAds } from '../platform/native';
 import { Icon, type IconName } from './Icons';
@@ -115,6 +116,8 @@ export function TalentsPanel({ state, canAscend, ascensionMarks, onUpgrade, onAs
 
 interface CodexPanelProps {
   state: GameState;
+  activeVoice: VoiceClipId | null;
+  onToggleVoice: (id: VoiceClipId) => void;
 }
 
 const codexFilters: { value: 'all' | ItemCategory; label: string }[] = [
@@ -138,7 +141,7 @@ function gearStat(kind: ItemKind): string {
   return '+12% attack speed per tier';
 }
 
-export function CodexPanel({ state }: CodexPanelProps) {
+export function CodexPanel({ state, activeVoice, onToggleVoice }: CodexPanelProps) {
   const [section, setSection] = useState<'gear' | 'bestiary' | 'chronicle'>('gear');
   const [filter, setFilter] = useState<'all' | ItemCategory>('all');
   const kinds = SHOP_POOL.filter((kind) => filter === 'all' || ITEM_DEFS[kind].category === filter);
@@ -215,8 +218,20 @@ export function CodexPanel({ state }: CodexPanelProps) {
       {section === 'chronicle' && (
         <div className="codex-list">
           <article className="chronicle-card">
-            <span className="eyebrow">{PROLOGUE_STORY.eyebrow}</span>
-            <h3>{PROLOGUE_STORY.title}</h3>
+            <div className="chronicle-head">
+              <div>
+                <span className="eyebrow">{PROLOGUE_STORY.eyebrow}</span>
+                <h3>{PROLOGUE_STORY.title}</h3>
+              </div>
+              <button
+                type="button"
+                className={`vo-pill-btn ${activeVoice === 'prologue' ? 'is-playing' : ''}`}
+                onClick={() => onToggleVoice('prologue')}
+              >
+                <Icon name="volume" size={14} />
+                <span>{activeVoice === 'prologue' ? 'Stop' : 'Listen'}</span>
+              </button>
+            </div>
             {PROLOGUE_STORY.paragraphs.map((p, i) => (
               <p className="justified" key={i}>{p}</p>
             ))}
@@ -224,10 +239,29 @@ export function CodexPanel({ state }: CodexPanelProps) {
           {CHAPTERS.map((chapter) => {
             const unlocked = state.highestStage > chapter.chapterNumber;
             const current = state.highestStage === chapter.chapterNumber;
+            const clipId = unlocked
+              ? voClipForChapterChronicle(chapter.chapterNumber)
+              : current
+                ? voClipForChapterIntro(chapter.chapterNumber)
+                : null;
             return (
               <article className={`chronicle-card ${unlocked ? 'is-cleared' : current ? 'is-current' : 'is-locked'}`} key={chapter.chapterNumber}>
-                <span className="eyebrow">Chapter {chapter.roman} · {chapter.subtitle}</span>
-                <h3>{chapter.title}</h3>
+                <div className="chronicle-head">
+                  <div>
+                    <span className="eyebrow">Chapter {chapter.roman} · {chapter.subtitle}</span>
+                    <h3>{chapter.title}</h3>
+                  </div>
+                  {clipId && (
+                    <button
+                      type="button"
+                      className={`vo-pill-btn ${activeVoice === clipId ? 'is-playing' : ''}`}
+                      onClick={() => onToggleVoice(clipId)}
+                    >
+                      <Icon name="volume" size={14} />
+                      <span>{activeVoice === clipId ? 'Stop' : 'Listen'}</span>
+                    </button>
+                  )}
+                </div>
                 {unlocked ? (
                   <p className="justified">{chapter.chronicleEntry}</p>
                 ) : current ? (
@@ -553,6 +587,8 @@ export function SettingsContent({ settings, recovered, onSettings, onTheme, onEx
         <label className="range-setting"><span>Sound volume</span><input type="range" min="0" max="1" step="0.05" value={settings.sfxVolume} onChange={(event) => onSettings({ sfxVolume: Number(event.target.value) })} /><strong>{Math.round(settings.sfxVolume * 100)}%</strong></label>
         <SettingToggle label="Workshop ambience" description="Soft wind, hearth embers, and distant birds. No instrumental music." checked={settings.ambience} onChange={(value) => onSettings({ ambience: value })} />
         <label className="range-setting"><span>Ambience volume</span><input type="range" min="0" max="1" step="0.05" value={settings.ambienceVolume} onChange={(event) => onSettings({ ambienceVolume: Number(event.target.value) })} /><strong>{Math.round(settings.ambienceVolume * 100)}%</strong></label>
+        <SettingToggle label="Story voice-over" description="Spoken narration for prologue, chapters, bosses, and lore." checked={settings.voice} onChange={(value) => onSettings({ voice: value })} />
+        <label className="range-setting"><span>Voice-over volume</span><input type="range" min="0" max="1" step="0.05" value={settings.voiceVolume} onChange={(event) => onSettings({ voiceVolume: Number(event.target.value) })} /><strong>{Math.round(settings.voiceVolume * 100)}%</strong></label>
         <SettingToggle label="Touch feedback" description="A short vibration for merges and important actions." checked={settings.haptics} onChange={(value) => onSettings({ haptics: value })} />
       </section>
       <section className="settings-section">

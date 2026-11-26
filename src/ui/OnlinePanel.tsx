@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { calculateLoadout } from '../game/data';
 import { OnlineBattleEngine, type OnlineBattleSnapshot } from '../game/onlineBattle';
 import type { GameState, RewardedAction } from '../game/types';
+import { voClipForWorldBoss, type VoiceClipId } from '../game/voice';
 import type {
   BoardResponse,
   PvpMatchResponse,
@@ -27,6 +28,10 @@ type OnlineTab = 'rankings' | 'worldboss' | 'pvp';
 interface OnlinePanelProps {
   state: GameState;
   rewardBusy: RewardedAction | null;
+  activeVoice: VoiceClipId | null;
+  onToggleVoice: (id: VoiceClipId) => void;
+  onPlayVoice: (id: VoiceClipId) => void;
+  onStopVoice: () => void;
   onSetNickname: (name: string) => void;
   onGrantReward: (gold: number, ore: number, reason: string) => void;
   onRewardedTicket: (action: 'worldboss-ticket' | 'pvp-ticket') => Promise<boolean>;
@@ -50,6 +55,10 @@ function formatCountdown(endsAt: number): string {
 export function OnlinePanel({
   state,
   rewardBusy,
+  activeVoice,
+  onToggleVoice,
+  onPlayVoice,
+  onStopVoice,
   onSetNickname,
   onGrantReward,
   onRewardedTicket,
@@ -57,6 +66,7 @@ export function OnlinePanel({
   onSound,
 }: OnlinePanelProps) {
   const [tab, setTab] = useState<OnlineTab>('rankings');
+  const wbSpokenRef = useRef<string | null>(null);
   const [session, setSession] = useState<RankSession | null>(null);
   const [editingNick, setEditingNick] = useState(false);
   const [nickInput, setNickInput] = useState(state.nickname);
@@ -101,6 +111,18 @@ export function OnlinePanel({
   );
   const myPower = useMemo(() => computeForgePower(state), [state]);
   const wbTheme = useMemo(() => resolveWorldBossTheme(wbData?.boss), [wbData?.boss]);
+  const wbClipId = voClipForWorldBoss(wbTheme.bossId);
+
+  useEffect(() => {
+    if (tab !== 'worldboss' || activeMatch) {
+      if (tab !== 'worldboss') onStopVoice();
+      return;
+    }
+    if (wbSpokenRef.current !== wbClipId) {
+      wbSpokenRef.current = wbClipId;
+      onPlayVoice(wbClipId);
+    }
+  }, [activeMatch, onPlayVoice, onStopVoice, tab, wbClipId]);
 
   const refreshPending = useCallback(async () => {
     setPendingCount(await rankClient.getPendingCount());
@@ -513,8 +535,20 @@ export function OnlinePanel({
               <img src={wbTheme.portrait} alt={wbTheme.title} />
             </div>
             <div className="wb-info">
-              <span className="eyebrow">{wbTheme.subtitle} · {wbData ? formatCountdown(wbData.boss.endsAt) : 'Weekly'}</span>
-              <h3>{wbTheme.title}</h3>
+              <div className="chronicle-head">
+                <div>
+                  <span className="eyebrow">{wbTheme.subtitle} · {wbData ? formatCountdown(wbData.boss.endsAt) : 'Weekly'}</span>
+                  <h3>{wbTheme.title}</h3>
+                </div>
+                <button
+                  type="button"
+                  className={`vo-pill-btn ${activeVoice === wbClipId ? 'is-playing' : ''}`}
+                  onClick={() => onToggleVoice(wbClipId)}
+                >
+                  <Icon name="volume" size={14} />
+                  <span>{activeVoice === wbClipId ? 'Stop' : 'Listen'}</span>
+                </button>
+              </div>
               <p className="justified">{wbTheme.lore}</p>
               <small className="wb-tactic-hint">Heavy Titan strikes escalate every 4s. Equip Armor, Vials, Frost &amp; Stuns to survive all 18s.</small>
             </div>
@@ -546,6 +580,7 @@ export function OnlinePanel({
                 disabled={wbLoading}
                 onClick={() => {
                   onSound('click');
+                  onStopVoice();
                   setActiveMatch({ mode: 'worldboss' });
                 }}
               >

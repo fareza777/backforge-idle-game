@@ -31,6 +31,7 @@ interface BattleCallbacks {
   onDefeat: () => void;
   onEnemyDefeated: (kind: EnemyKind) => void;
   onOverdrive: () => void;
+  onBossWave?: (stage: number) => void;
   onSound: (sound: 'sword' | 'bow' | 'hit' | 'hammer' | 'victory' | 'crit' | 'overdrive' | 'shield') => void;
 }
 
@@ -348,6 +349,7 @@ export class BattleEngine {
       life: 1.9,
       maxLife: 1.9,
     };
+    if (boss) this.callbacks.onBossWave?.(this.activeStage);
     this.emitSnapshot();
   };
 

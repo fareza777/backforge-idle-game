@@ -12,6 +12,7 @@ import {
   scaleForTier,
 } from '../game/data';
 import type { GameState, Item, Talents } from '../game/types';
+import type { VoiceClipId } from '../game/voice';
 import { Icon } from './Icons';
 
 export type MoveResult = 'merged' | 'moved' | 'swapped' | 'none';
@@ -22,6 +23,8 @@ interface BackpackProps {
   onSalvage: (index: number) => boolean;
   onAdvanceOnboarding: () => void;
   onSkipOnboarding: () => void;
+  activeVoice?: VoiceClipId | null;
+  onToggleVoice?: (id: VoiceClipId) => void;
 }
 
 interface DragState {
@@ -40,6 +43,8 @@ export function Backpack({
   onSalvage,
   onAdvanceOnboarding,
   onSkipOnboarding,
+  activeVoice,
+  onToggleVoice,
 }: BackpackProps) {
   const [selected, setSelected] = useState<number | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -233,9 +238,21 @@ export function Backpack({
                 ? <p><strong>Forge bond:</strong> the Whetstone adds +20% Attack to the blade beside it.</p>
                 : <p><strong>Start the wave below.</strong> Your knight fights automatically.</p>}
           </div>
-          {state.onboardingStep === 1
-            ? <button className="forge-button" onClick={onAdvanceOnboarding}>I’m ready</button>
-            : <button className="text-button" onClick={onSkipOnboarding}>Skip</button>}
+          <div className="coach-actions">
+            {onToggleVoice && (
+              <button
+                type="button"
+                className={`vo-mini-btn ${activeVoice === (`onboard-${state.onboardingStep}` as VoiceClipId) ? 'is-playing' : ''}`}
+                aria-label="Listen to guide"
+                onClick={() => onToggleVoice(`onboard-${state.onboardingStep}` as VoiceClipId)}
+              >
+                <Icon name="volume" size={14} />
+              </button>
+            )}
+            {state.onboardingStep === 1
+              ? <button className="forge-button" onClick={onAdvanceOnboarding}>I’m ready</button>
+              : <button className="text-button" onClick={onSkipOnboarding}>Skip</button>}
+          </div>
         </div>
       )}
 

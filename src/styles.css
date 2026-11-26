@@ -3843,6 +3843,75 @@ h4 {
   padding: 4px 7px 4px 4px;
 }
 
+/* === Voice-Over Narration Controls === */
+
+.chronicle-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.vo-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(185, 135, 64, 0.55);
+  background: rgba(244, 232, 207, 0.92);
+  color: #4b311b;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.vo-pill-btn.is-playing {
+  background: linear-gradient(180deg, #f2be59 0%, #d9942c 100%);
+  color: #2c1808;
+  border-color: #f9d988;
+  box-shadow: 0 0 0 2px rgba(242, 190, 89, 0.35);
+}
+
+.app-shell.theme-dark .vo-pill-btn {
+  background: rgba(46, 36, 28, 0.92);
+  color: #f2dec0;
+  border-color: rgba(217, 168, 86, 0.45);
+}
+
+.app-shell.theme-warm .vo-pill-btn {
+  background: rgba(84, 52, 34, 0.92);
+  color: #ffebd0;
+  border-color: rgba(235, 180, 96, 0.45);
+}
+
+.coach-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.vo-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(185, 135, 64, 0.55);
+  background: rgba(244, 232, 207, 0.92);
+  color: #4b311b;
+  cursor: pointer;
+}
+
+.vo-mini-btn.is-playing {
+  background: linear-gradient(180deg, #f2be59 0%, #d9942c 100%);
+  color: #2c1808;
+}
+
 .onboarding-coach {
   padding: 7px 10px;
   margin-bottom: 5px;
