@@ -3749,3 +3749,65 @@ h4 {
   color: #f5dfb8;
   font-size: 11.5px;
 }
+
+/* === Real-Device SafeArea, Backpack Slot Art & Arena Framing Polish === */
+
+.backpack-slot .item-art {
+  position: absolute;
+  inset: 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  margin: 0;
+}
+
+.backpack-grid {
+  padding-top: 14px;
+  padding-bottom: 8px;
+}
+
+.backpack-flap {
+  height: 14px;
+}
+
+.hero-hud {
+  bottom: 6px;
+  padding: 4px 7px 4px 4px;
+}
+
+.onboarding-coach {
+  padding: 7px 10px;
+  margin-bottom: 5px;
+  gap: 8px;
+}
+
+.onboarding-coach .coach-copy p {
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.app-shell.has-native-ad .arena {
+  flex-basis: clamp(205px, 31dvh, 250px);
+}
+
+.app-shell.has-native-ad .forge-tray {
+  flex-basis: 152px;
+  padding-top: 4px;
+  padding-bottom: 5px;
+}
+
+.app-shell.has-native-ad .shop-slots {
+  height: 70px;
+}
+
+.app-shell.has-native-ad .shop-slot {
+  grid-template-rows: 30px 17px 17px;
+  padding: 2px 4px 3px;
+}
+
+.app-shell.has-native-ad .shop-slot > img {
+  width: 30px;
+  height: 30px;
+}

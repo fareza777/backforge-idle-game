@@ -330,7 +330,7 @@ export class OnlineBattleEngine {
     this.canvas.width = Math.round(this.width * this.dpr);
     this.canvas.height = Math.round(this.height * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.ground = this.height * 0.83;
+    this.ground = this.height * 0.76;
   }
 
   private loop = (time: number): void => {
@@ -907,7 +907,7 @@ export class OnlineBattleEngine {
     const animTime = attack ? attack.duration - attack.time : f.animTime;
     const image = this.animationFrame(clip, animTime) ?? this.images.get('hero');
     const ratio = CLIP_META[clip].bodyHeightRatio;
-    const spriteH = Math.min(this.height * 0.68, 162) * ratio;
+    const spriteH = Math.min(this.height * 0.48, 124) * ratio;
     const spriteW = image?.naturalWidth ? (spriteH * image.naturalWidth) / image.naturalHeight : spriteH * 0.62;
     const progress = attack ? 1 - attack.time / attack.duration : 0;
     const isRanged = attack?.kind === 'bow' || attack?.kind === 'crossbow';
@@ -974,7 +974,7 @@ export class OnlineBattleEngine {
     const animTime = isAttacking && theme?.attackClip ? progress * this.bossAttackDuration : this.bossAnimTime;
     const image = this.animationFrame(clip, animTime) ?? this.images.get('worldboss');
 
-    const spriteH = Math.min(this.height * 0.84, 198);
+    const spriteH = Math.min(this.height * 0.58, 152);
     const spriteW = image?.naturalWidth ? (spriteH * image.naturalWidth) / image.naturalHeight : spriteH * 0.85;
 
     let lunge = 0;

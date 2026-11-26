@@ -509,7 +509,7 @@ export class BattleEngine {
     this.canvas.width = Math.round(this.width * this.dpr);
     this.canvas.height = Math.round(this.height * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.ground = this.height * 0.82;
+    this.ground = this.height * 0.72;
     this.hero.x = Math.min(this.hero.x, this.width * 0.55);
   }
 
@@ -1085,7 +1085,7 @@ export class BattleEngine {
     const animationTime = attack ? attack.duration - attack.time : this.hero.animTime;
     const image = this.animationFrame(clip, animationTime) ?? this.images.get('hero');
     const ratio = ANIMATION_INFO[clip].bodyHeightRatio;
-    const spriteHeight = Math.min(this.height * 0.68, 170) * ratio;
+    const spriteHeight = Math.min(this.height * 0.44, 118) * ratio;
     const spriteWidth = image?.naturalWidth ? (spriteHeight * image.naturalWidth) / image.naturalHeight : spriteHeight * 0.62;
     const progress = attack ? 1 - attack.time / attack.duration : 0;
     const isRangedAttack = attack?.kind === 'bow' || attack?.kind === 'crossbow';
@@ -1140,12 +1140,12 @@ export class BattleEngine {
     const image = this.animationFrame(clip, animationTime) ?? this.images.get(monster.kind);
 
     const baseHeight = monster.isBoss
-      ? Math.min(this.height * 0.76, 192)
+      ? Math.min(this.height * 0.54, 142)
       : monster.kind === 'boar' || monster.kind === 'hound'
-        ? this.height * 0.31
+        ? this.height * 0.24
         : monster.kind === 'golem'
-          ? this.height * 0.56
-          : this.height * 0.5;
+          ? this.height * 0.42
+          : this.height * 0.38;
     const spriteHeight = baseHeight;
     const spriteWidth = image?.naturalWidth ? (spriteHeight * image.naturalWidth) / image.naturalHeight : spriteHeight * 0.8;
 
@@ -1392,7 +1392,7 @@ export class BattleEngine {
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.textAlign = 'center';
-    const y = this.height * 0.3 - progress * 5;
+    const y = this.height * 0.46 - progress * 4;
     const gradient = ctx.createLinearGradient(this.width * 0.18, 0, this.width * 0.82, 0);
     gradient.addColorStop(0, 'rgba(245, 196, 92, 0)');
     gradient.addColorStop(0.25, 'rgba(245, 196, 92, 0.9)');
