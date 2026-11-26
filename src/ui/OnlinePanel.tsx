@@ -420,36 +420,36 @@ export function OnlinePanel({
             {activeMatch.mode === 'pvp' && liveSnap && (
               <div className="pvp-hp-bars">
                 <div className="pvp-hp-box">
-                  <small>{state.nickname} ({liveSnap.heroHp}/{liveSnap.heroMaxHp})</small>
+                  <small><span className="pvp-role-tag is-you">YOU</span>{state.nickname} ({liveSnap.heroHp}/{liveSnap.heroMaxHp})</small>
                   <div className="hero-health-track"><span style={{ width: `${(liveSnap.heroHp / Math.max(1, liveSnap.heroMaxHp)) * 100}%` }} /></div>
                 </div>
                 <div className="pvp-hp-box is-rival">
-                  <small>{activeMatch.opponent.nickname} ({liveSnap.enemyHp}/{liveSnap.enemyMaxHp})</small>
+                  <small><span className="pvp-role-tag is-rival">RIVAL</span>{activeMatch.opponent.nickname} ({liveSnap.enemyHp}/{liveSnap.enemyMaxHp})</small>
                   <div className="boss-health-track"><span style={{ width: `${(liveSnap.enemyHp / Math.max(1, liveSnap.enemyMaxHp)) * 100}%` }} /></div>
                 </div>
               </div>
             )}
+          </div>
 
-            <div className="online-stage-footer">
-              <div className="online-dmg-readout">
-                <strong>{formatNum(liveSnap?.totalDamage ?? 0)}</strong>
-                <span>{activeMatch.mode === 'worldboss' ? `DMG · ${formatNum(liveSnap?.dps ?? 0)} DPS` : 'Damage Dealt'}</span>
-              </div>
-              <button
-                type="button"
-                className={`overdrive-button inline-overdrive ${liveSnap?.overdriveReady ? 'is-ready' : ''}`}
-                disabled={!liveSnap?.overdriveReady}
-                onClick={() => engineRef.current?.triggerOverdrive()}
-              >
-                <Icon name="flame" size={15} />
-                <span>{liveSnap?.overdriveReady ? 'Anvil Strike!' : `${liveSnap?.overdrive ?? 0}%`}</span>
-              </button>
-              {activeMatch.mode === 'worldboss' && !liveSnap?.finished && (
-                <button type="button" className="text-button finish-early-btn" onClick={() => engineRef.current?.finishNow()}>
-                  Finish
-                </button>
-              )}
+          <div className="online-stage-footer">
+            <div className="online-dmg-readout">
+              <strong>{formatNum(liveSnap?.totalDamage ?? 0)}</strong>
+              <span>{activeMatch.mode === 'worldboss' ? `DMG · ${formatNum(liveSnap?.dps ?? 0)} DPS` : 'Damage Dealt'}</span>
             </div>
+            <button
+              type="button"
+              className={`overdrive-button inline-overdrive ${liveSnap?.overdriveReady ? 'is-ready' : ''}`}
+              disabled={!liveSnap?.overdriveReady}
+              onClick={() => engineRef.current?.triggerOverdrive()}
+            >
+              <Icon name="flame" size={15} />
+              <span>{liveSnap?.overdriveReady ? 'Anvil Strike!' : `${liveSnap?.overdrive ?? 0}%`}</span>
+            </button>
+            {activeMatch.mode === 'worldboss' && !liveSnap?.finished && (
+              <button type="button" className="text-button finish-early-btn" onClick={() => engineRef.current?.finishNow()}>
+                Finish
+              </button>
+            )}
           </div>
         </section>
       )}

@@ -12,7 +12,7 @@ import {
 } from '../src/game/data';
 import { BACKUP_KEY, SAVE_KEY, loadState, saveState, type StorageLike } from '../src/game/save';
 import { GameStore } from '../src/game/store';
-import { worldBossStrikeDamage } from '../src/game/onlineBattle';
+import { onlineGroundRatio, worldBossStrikeDamage } from '../src/game/onlineBattle';
 
 class MemoryStorage implements StorageLike {
   values = new Map<string, string>();
@@ -367,5 +367,10 @@ describe('online features: F7RankClient offline-first SDK, World Boss & Async Pv
       totalTankDmg += worldBossStrikeDamage(hit, hit * 1.65, 55).damage;
     }
     expect(totalTankDmg).toBeLessThan(550);
+  });
+
+  it('grounds PvP and World Boss fighters on the stone arena floor', () => {
+    expect(onlineGroundRatio('pvp')).toBeGreaterThanOrEqual(0.88);
+    expect(onlineGroundRatio('worldboss')).toBeGreaterThanOrEqual(0.85);
   });
 });

@@ -21,6 +21,10 @@ export interface OnlineBattleSnapshot {
   won: boolean | null;
 }
 
+export function onlineGroundRatio(mode: OnlineBattleMode): number {
+  return mode === 'pvp' ? 0.9 : 0.88;
+}
+
 export function worldBossStrikeDamage(
   hitNumber: number,
   elapsedSeconds: number,
@@ -194,6 +198,10 @@ export class OnlineBattleEngine {
   private particles: Particle[] = [];
   private floaters: Floater[] = [];
   private ambientTimer = 0;
+  private clashCooldown = 0;
+  private clashFlash = 0;
+  private clashX = 0;
+  private clashY = 0;
   private banner: { text: string; subtext: string; life: number; maxLife: number } | null = null;
 
   constructor(canvas: HTMLCanvasElement, options: OnlineBattleOptions) {
@@ -351,7 +359,7 @@ export class OnlineBattleEngine {
     this.canvas.width = Math.round(this.width * this.dpr);
     this.canvas.height = Math.round(this.height * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.ground = this.height * 0.76;
+    this.ground = this.height * onlineGroundRatio(this.opts.mode);
   }
 
   private loop = (time: number): void => {
@@ -467,6 +475,65 @@ export class OnlineBattleEngine {
 
     if (f.burnTime > 0 && f.burnDps > 0) {
       f.hp = Math.max(0, f.hp - f.burnDps * dt);
+      if (Math.random() < dt * 7) {
+        this.particles.push({
+          kind: 'spark',
+          x: f.x + (Math.random() - 0.5) * 20,
+          y: this.ground - 26 - Math.random() * 40,
+          vx: (Math.random() - 0.5) * 24,
+          vy: -36,
+          life: 0.4,
+          maxLife: 0.4,
+          size: 2.1,
+          color: '#ef7c35',
+          rotation: 0,
+        });
+      }
+    }
+
+    if (f.slowTime > 0 && Math.random() < dt * 5) {
+      this.particles.push({
+        kind: 'star',
+        x: f.x + (Math.random() - 0.5) * 24,
+        y: this.ground - 18 - Math.random() * 44,
+        vx: (Math.random() - 0.5) * 16,
+        vy: 14,
+        life: 0.45,
+        maxLife: 0.45,
+        size: 1.9,
+        color: '#9ae3ff',
+        rotation: Math.random() * Math.PI,
+      });
+    }
+
+    if (loadout.healPerSecond > 0 && f.hp < f.maxHp && Math.random() < dt * 4) {
+      this.particles.push({
+        kind: 'dust',
+        x: f.x + (Math.random() - 0.5) * 22,
+        y: this.ground - 16 - Math.random() * 24,
+        vx: (Math.random() - 0.5) * 10,
+        vy: -24,
+        life: 0.55,
+        maxLife: 0.55,
+        size: 2.2,
+        color: '#6ad17a',
+        rotation: 0,
+      });
+    }
+
+    if (f.moving && Math.random() < dt * 8) {
+      this.particles.push({
+        kind: 'dust',
+        x: f.x + (Math.random() - 0.5) * 18,
+        y: this.ground - 2,
+        vx: (Math.random() - 0.5) * 24,
+        vy: -14 - Math.random() * 12,
+        life: 0.32,
+        maxLife: 0.32,
+        size: 2.4,
+        color: '#c8b59a',
+        rotation: 0,
+      });
     }
 
     if (f.attack) {
@@ -660,23 +727,49 @@ export class OnlineBattleEngine {
     const heroLoadout = this.opts.heroLoadout;
     const rivalLoadout = this.opts.rivalLoadout ?? heroLoadout;
 
+    this.clashCooldown = Math.max(0, this.clashCooldown - dt);
+    this.clashFlash = Math.max(0, this.clashFlash - dt);
+
     const heroRangedOnly = heroLoadout.weapons.length > 0
       && heroLoadout.weapons.every((w) => w.item.kind === 'bow' || w.item.kind === 'crossbow');
     const rivalRangedOnly = rivalLoadout.weapons.length > 0
       && rivalLoadout.weapons.every((w) => w.item.kind === 'bow' || w.item.kind === 'crossbow');
 
-    const heroDesired = heroRangedOnly ? this.width * 0.24 : Math.min(this.width * 0.43, this.rival.x - 66);
-    const rivalDesired = rivalRangedOnly ? this.width * 0.76 : Math.max(this.width * 0.57, this.hero.x + 66);
+    const minMeleeGap = Math.max(96, this.width * 0.28);
+    const heroDesired = heroRangedOnly ? this.width * 0.2 : Math.min(this.width * 0.36, this.rival.x - minMeleeGap);
+    const rivalDesired = rivalRangedOnly ? this.width * 0.8 : Math.max(this.width * 0.64, this.hero.x + minMeleeGap);
+
+    const minX = this.width * 0.14;
+    const maxX = this.width * 0.86;
 
     const hd = heroDesired - this.hero.x;
     this.hero.moving = Math.abs(hd) > 5;
-    this.hero.x += hd * Math.min(1, dt * 3.8);
+    this.hero.x = Math.max(minX, Math.min(maxX, this.hero.x + hd * Math.min(1, dt * 3.8)));
 
     const rd = rivalDesired - this.rival.x;
     this.rival.moving = Math.abs(rd) > 5;
-    this.rival.x += rd * Math.min(1, dt * 3.8);
+    this.rival.x = Math.max(minX, Math.min(maxX, this.rival.x + rd * Math.min(1, dt * 3.8)));
 
     const distance = this.rival.x - this.hero.x;
+
+    // Central steel-clash spark burst when both melee swings meet
+    if (this.clashCooldown <= 0 && this.hero.attack && this.rival.attack) {
+      const hKind = this.hero.attack.kind;
+      const rKind = this.rival.attack.kind;
+      const hMelee = hKind !== 'bow' && hKind !== 'crossbow';
+      const rMelee = rKind !== 'bow' && rKind !== 'crossbow';
+      const hProg = 1 - this.hero.attack.time / this.hero.attack.duration;
+      const rProg = 1 - this.rival.attack.time / this.rival.attack.duration;
+      if (hMelee && rMelee && hProg >= 0.25 && hProg <= 0.65 && rProg >= 0.25 && rProg <= 0.65) {
+        this.clashX = (this.hero.x + this.rival.x) / 2;
+        this.clashY = this.ground - 56;
+        this.clashFlash = 0.16;
+        this.clashCooldown = 0.55;
+        this.shake = Math.max(this.shake, 3.8);
+        this.burst(this.clashX, this.clashY, '#fff7d6', 9, 'spark');
+        this.burst(this.clashX, this.clashY, '#ffb84d', 5, 'star');
+      }
+    }
 
     // Hero attacks Rival
     if (this.hero.stunTime <= 0) {
@@ -704,7 +797,7 @@ export class OnlineBattleEngine {
   ): void {
     if (attackerLoadout.weapons.length === 0) {
       attacker.fistTimer -= dt;
-      if (attacker.fistTimer <= 0 && distance <= 96) {
+      if (attacker.fistTimer <= 0 && distance <= 122) {
         attacker.fistTimer = 0.85;
         this.queueFighterAttack(attacker, 'fists', 0.26);
         const target = isHero ? this.rival : this.hero;
@@ -714,7 +807,7 @@ export class OnlineBattleEngine {
     } else {
       attackerLoadout.weapons.forEach((weapon, idx) => {
         attacker.weaponTimers[idx] -= dt;
-        if (attacker.weaponTimers[idx] > 0 || distance > Math.max(weapon.range, 92)) return;
+        if (attacker.weaponTimers[idx] > 0 || distance > Math.max(weapon.range, 122)) return;
         attacker.weaponTimers[idx] = weapon.cooldown;
         const dur = attackDuration(weapon.item.kind);
         this.queueFighterAttack(attacker, weapon.item.kind, dur);
@@ -885,9 +978,62 @@ export class OnlineBattleEngine {
       this.burst(target.x, this.ground - this.height * 0.34, '#ffd24c', 8, 'star');
     }
 
+    const isHeavy = weapon?.item.kind === 'hammer' || weapon?.item.kind === 'axe';
+    const knockback = fromOverdrive ? 26 : isCrit ? 15 : isHeavy ? 10 : 0;
+    if (knockback > 0) {
+      target.x = Math.max(
+        this.width * 0.14,
+        Math.min(this.width * 0.86, target.x + (fromHero ? 1 : -1) * knockback),
+      );
+      for (let d = 0; d < 3; d += 1) {
+        this.particles.push({
+          kind: 'dust',
+          x: target.x + (Math.random() - 0.5) * 16,
+          y: this.ground - 2,
+          vx: (fromHero ? 1 : -1) * (18 + Math.random() * 24),
+          vy: -12 - Math.random() * 14,
+          life: 0.35,
+          maxLife: 0.35,
+          size: 2.8,
+          color: '#c8b59a',
+          rotation: 0,
+        });
+      }
+    }
+
+    if (isHeavy || fromOverdrive) {
+      this.particles.push({
+        kind: 'ring',
+        x: target.x,
+        y: this.ground - 4,
+        vx: 0,
+        vy: 0,
+        life: 0.32,
+        maxLife: 0.32,
+        size: fromOverdrive ? 36 : 24,
+        color: '#ffd066',
+        rotation: 0,
+      });
+    }
+
+    if (targetLoadout.armor >= 10) {
+      this.particles.push({
+        kind: 'ring',
+        x: target.x,
+        y: this.ground - this.height * 0.25,
+        vx: 0,
+        vy: 0,
+        life: 0.22,
+        maxLife: 0.22,
+        size: 16,
+        color: '#d4dfe8',
+        rotation: 0,
+      });
+    }
+
     this.floaters.push({
       x: target.x + (Math.random() - 0.5) * 16,
-      y: this.ground - this.height * 0.48,
+      y: Math.max(96, this.ground - this.height * 0.44),
       text: isCrit ? `CRIT ${finalDmg}!` : `-${finalDmg}`,
       color: fromHero ? (isCrit ? '#ffd24c' : '#fff8df') : '#e55c55',
       life: 0.75,
@@ -963,6 +1109,19 @@ export class OnlineBattleEngine {
     }
     this.drawKnight(this.hero, true, this.finished && this.won === false);
     this.drawProjectiles();
+    if (this.clashFlash > 0) {
+      ctx.save();
+      const alpha = this.clashFlash / 0.16;
+      const grad = ctx.createRadialGradient(this.clashX, this.clashY, 2, this.clashX, this.clashY, 34);
+      grad.addColorStop(0, `rgba(255, 248, 214, ${0.9 * alpha})`);
+      grad.addColorStop(0.45, `rgba(255, 196, 92, ${0.55 * alpha})`);
+      grad.addColorStop(1, 'rgba(255, 184, 77, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(this.clashX, this.clashY, 34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     this.drawParticles();
     this.drawFloaters();
     this.drawBanner();
@@ -976,7 +1135,7 @@ export class OnlineBattleEngine {
     const animTime = attack ? attack.duration - attack.time : f.animTime;
     const image = this.animationFrame(clip, animTime) ?? this.images.get('hero');
     const ratio = CLIP_META[clip].bodyHeightRatio;
-    const spriteH = Math.min(this.height * 0.48, 124) * ratio;
+    const spriteH = Math.min(this.height * 0.46, 122) * ratio;
     const spriteW = image?.naturalWidth ? (spriteH * image.naturalWidth) / image.naturalHeight : spriteH * 0.62;
     const progress = attack ? 1 - attack.time / attack.duration : 0;
     const isRanged = attack?.kind === 'bow' || attack?.kind === 'crossbow';
@@ -989,9 +1148,14 @@ export class OnlineBattleEngine {
 
     ctx.save();
     if (defeated) ctx.globalAlpha = 0.45;
-    ctx.fillStyle = 'rgba(42, 26, 15, 0.25)';
+    // Two-layer grounded contact shadow on cobblestone floor
+    ctx.fillStyle = 'rgba(22, 13, 8, 0.34)';
     ctx.beginPath();
-    ctx.ellipse(f.x + lunge * 0.5, this.ground + 4, spriteW * 0.28, 7, 0, 0, Math.PI * 2);
+    ctx.ellipse(f.x + lunge * 0.5, this.ground + 3, spriteW * 0.31, 7.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(12, 7, 4, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(f.x + lunge * 0.5, this.ground + 1, spriteW * 0.21, 4, 0, 0, Math.PI * 2);
     ctx.fill();
 
     if (f.slowTime > 0) {
@@ -1018,16 +1182,26 @@ export class OnlineBattleEngine {
 
     if (attack && attack.kind !== 'bow' && attack.kind !== 'crossbow' && attack.kind !== 'fists' && progress > 0.26 && progress < 0.74) {
       ctx.save();
-      ctx.translate(f.x + 22 * dir, this.ground - this.height * 0.36);
+      ctx.translate(f.x + 22 * dir, this.ground - this.height * 0.32);
       ctx.scale(dir, 1);
       ctx.rotate(-0.6 + progress * 1.15);
       ctx.globalAlpha = Math.sin(progress * Math.PI);
       ctx.strokeStyle = isHero ? '#fff6d8' : '#b4e4ff';
-      ctx.lineWidth = attack.kind === 'hammer' || attack.kind === 'axe' ? 7 : 4.5;
       ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.arc(0, 0, attack.kind === 'daggers' ? 26 : 36, -0.9, 0.85);
-      ctx.stroke();
+      if (attack.kind === 'daggers') {
+        ctx.lineWidth = 3.2;
+        ctx.beginPath();
+        ctx.arc(0, -4, 24, -0.85, 0.8);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(4, 6, 20, -0.7, 0.95);
+        ctx.stroke();
+      } else {
+        ctx.lineWidth = attack.kind === 'hammer' || attack.kind === 'axe' ? 7.5 : 4.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, attack.kind === 'hammer' || attack.kind === 'axe' ? 38 : 34, -0.9, 0.85);
+        ctx.stroke();
+      }
       ctx.restore();
     }
     ctx.restore();
@@ -1047,7 +1221,7 @@ export class OnlineBattleEngine {
         : 0;
     const image = this.animationFrame(clip, animTime) ?? this.images.get('worldboss');
 
-    const spriteH = Math.min(this.height * 0.58, 152);
+    const spriteH = Math.min(this.height * 0.56, 148);
     const spriteW = image?.naturalWidth ? (spriteH * image.naturalWidth) / image.naturalHeight : spriteH * 0.85;
 
     let lunge = 0;
@@ -1083,9 +1257,13 @@ export class OnlineBattleEngine {
     ctx.stroke();
 
     ctx.globalAlpha = 1;
-    ctx.fillStyle = 'rgba(32, 18, 10, 0.3)';
+    ctx.fillStyle = 'rgba(22, 13, 8, 0.36)';
     ctx.beginPath();
-    ctx.ellipse(this.bossX - lunge * 0.5, this.ground + 4, spriteW * 0.36, 9, 0, 0, Math.PI * 2);
+    ctx.ellipse(this.bossX - lunge * 0.5, this.ground + 3, spriteW * 0.38, 9.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(12, 7, 4, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(this.bossX - lunge * 0.5, this.ground + 1, spriteW * 0.28, 5, 0, 0, Math.PI * 2);
     ctx.fill();
 
     if (isAttacking && progress < 0.42) {
@@ -1135,6 +1313,12 @@ export class OnlineBattleEngine {
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.scale(dir, 1);
+      ctx.strokeStyle = p.fromHero ? 'rgba(255, 228, 157, 0.45)' : 'rgba(142, 214, 255, 0.45)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-30, 0);
+      ctx.lineTo(-10, 0);
+      ctx.stroke();
       ctx.strokeStyle = p.kind === 'bolt' ? '#d9e3e8' : '#6f4928';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
